@@ -30,6 +30,7 @@ const (
 	corralRegistryIP                     = "registry_ip"
 	corralRegistryFQDN                   = "registry_fqdn"
 	logMessageKubernetesVersion          = "Validating the current version is the upgraded one"
+	namespace                            = "fleet-default"
 )
 
 func airgapCorral(t *testing.T, corralRancherHA *corralha.CorralRancherHA) (registryFQDN string) {
@@ -60,7 +61,7 @@ func airgapCorral(t *testing.T, corralRancherHA *corralha.CorralRancherHA) (regi
 	return registryFQDN
 }
 
-func TfpSetupSuite(t *testing.T) (map[string]any,*rancher.Config, *terraform.Options, *config.TerraformConfig, *config.TerratestConfig) {
+func TfpSetupSuite(t *testing.T) (map[string]any, *rancher.Config, *terraform.Options, *config.TerraformConfig, *config.TerratestConfig) {
 	testSession := session.NewSession()
 	cattleConfig := shepherdConfig.LoadConfigFromFile(os.Getenv(shepherdConfig.ConfigEnvironmentKey))
 	configMap, err := provisioning.UniquifyTerraform([]map[string]any{cattleConfig})

@@ -6,6 +6,7 @@ node {
   def TERRAFORM_DIR = './root/go/src/github.com/rancher/tfp-automation/modules/airgap'
   def configYmlPath = "./root/go/src/github.com/rancher/tfp-automation"
   def testsDir = "github.com/rancher/tfp-automation/tests/${env.TEST_PACKAGE}"
+  def golangTestDir = "/root/go/src/github.com/rancher/tests/validation/${env.GO_TEST_PACKAGE}"
   def filename = "config.yml"
   def job_name = "${JOB_NAME}"
   if (job_name.contains('/')) { 
@@ -13,7 +14,7 @@ node {
     job_name = job_names[job_names.size() - 1] 
   }
   def configGeneratorContainer = "${job_name}${env.BUILD_NUMBER}_generator"
-  def golangTestContainer = "${job_name}${env.BUILD_NUMBER}_golangtest"
+  def golangTestContainer = "${job_name}${env.BUILD_NUMBER}_test2"
   def testContainer = "${job_name}${env.BUILD_NUMBER}_test"
   def imageName = "tfp-automation-validation-${job_name}${env.BUILD_NUMBER}"
   def testResultsOut = "results.xml"

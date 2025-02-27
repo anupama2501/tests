@@ -10,6 +10,7 @@ import (
 	steveV1 "github.com/rancher/shepherd/clients/rancher/v1"
 	extensionscluster "github.com/rancher/shepherd/extensions/clusters"
 	"github.com/rancher/shepherd/extensions/clusters/kubernetesversions"
+	"github.com/rancher/shepherd/extensions/defaults/stevetypes"
 	"github.com/rancher/shepherd/extensions/users"
 	password "github.com/rancher/shepherd/extensions/users/passwordgenerator"
 	"github.com/rancher/shepherd/pkg/config"
@@ -173,17 +174,37 @@ func (a *AirGapRKE2CustomClusterTestSuite) TestProvisioningAirGapUpgradeRKE2Cust
 
 		versionToUpgrade := rke2Versions[numOfRKE2Versions-1]
 		tt.name += testConfig.KubernetesVersion + " to " + versionToUpgrade
+		var clusterObject *steveV1.SteveAPIObject
 
 		a.Run(tt.name, func() {
-			clusterObject, err := provisioning.CreateProvisioningAirgapCustomCluster(a.client, testConfig, a.corralPackage)
-			require.NoError(a.T(), err)
+			if a.corralPackage != nil {
+				clusterObject, err = provisioning.CreateProvisioningAirgapCustomCluster(a.client, testConfig, a.corralPackage)
+				require.NoError(a.T(), err)
 
-			reports.TimeoutClusterReport(clusterObject, err)
-			require.NoError(a.T(), err)
+				reports.TimeoutClusterReport(clusterObject, err)
+				require.NoError(a.T(), err)
 
-			provisioning.VerifyCluster(a.T(), a.client, testConfig, clusterObject)
+				provisioning.VerifyCluster(a.T(), a.client, testConfig, clusterObject)
+			} else {
+				cattleConfig, rancherConfig, terraformOptions, terraformConfig, terratestConfig := TfpSetupSuite(a.T())
 
+				testUser, testPassword := configs.CreateTestCredentials()
+				configMap := []map[string]any{cattleConfig}
+
+				module := "airgap_rke2"
+				operations.ReplaceValue([]string{"terraform", "module"}, module, configMap[0])
+				operations.ReplaceValue([]string{"terraform", "privateRegistries", "systemDefaultRegistry"}, a.registryFQDN, configMap[0])
+				operations.ReplaceValue([]string{"terraform", "privateRegistries", "url"}, a.registryFQDN, configMap[0])
+
+				clusterIDs := tfProvision.Provision(a.T(), a.client, rancherConfig, terraformConfig, terratestConfig, testUser, testPassword, terraformOptions, configMap, false)
+
+				tfProvision.VerifyClustersState(a.T(), a.client, clusterIDs)
+				tfProvision.VerifyRegistry(a.T(), a.client, clusterIDs[0], terraformConfig)
+				clusterObject, err = a.client.Steve.SteveType(stevetypes.Provisioning).ByID(namespace + "/" + clusterIDs[0])
+				require.NoError(a.T(), err)
+			}
 			updatedClusterObject := new(apisV1.Cluster)
+
 			err = steveV1.ConvertToK8sType(clusterObject, &updatedClusterObject)
 			require.NoError(a.T(), err)
 
