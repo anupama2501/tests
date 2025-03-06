@@ -79,6 +79,8 @@ require (
 
 )
 
+require gotest.tools/v3 v3.5.1 // indirect
+
 require (
 	dario.cat/mergo v1.0.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect

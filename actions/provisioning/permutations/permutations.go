@@ -98,7 +98,11 @@ func RunTestPermutations(s *suite.Suite, testNamePrefix string, client *rancher.
 	if strings.Contains(clusterType, "Custom") {
 		providers = provisioningConfig.NodeProviders
 	} else if strings.Contains(clusterType, "Airgap") {
-		providers = []string{"Corral"}
+		if corralPackages != nil {
+			providers = []string{"Corral"}
+		} else {
+			providers = provisioningConfig.Providers
+		}
 	} else {
 		providers = provisioningConfig.Providers
 	}
@@ -181,9 +185,11 @@ func RunTestPermutations(s *suite.Suite, testNamePrefix string, client *rancher.
 					// airgap currently uses corral to create nodes and register with rancher
 					case RKE2AirgapCluster, K3SAirgapCluster:
 						testClusterConfig.KubernetesVersion = kubeVersion
-						clusterObject, err = provisioning.CreateProvisioningAirgapCustomCluster(client, testClusterConfig, corralPackages)
-						reports.TimeoutClusterReport(clusterObject, err)
-						require.NoError(s.T(), err)
+						if corralPackages != nil {
+							clusterObject, err = provisioning.CreateProvisioningAirgapCustomCluster(client, testClusterConfig, corralPackages)
+							reports.TimeoutClusterReport(clusterObject, err)
+							require.NoError(s.T(), err)
+						}
 
 						provisioning.VerifyCluster(s.T(), client, testClusterConfig, clusterObject)
 

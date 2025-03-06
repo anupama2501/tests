@@ -1,5 +1,3 @@
-//go:build validation
-
 package airgap
 
 import (
@@ -15,6 +13,7 @@ import (
 	"github.com/rancher/shepherd/extensions/users"
 	password "github.com/rancher/shepherd/extensions/users/passwordgenerator"
 	"github.com/rancher/shepherd/pkg/config"
+	"github.com/rancher/shepherd/pkg/config/operations"
 	namegen "github.com/rancher/shepherd/pkg/namegenerator"
 	"github.com/rancher/shepherd/pkg/session"
 	"github.com/rancher/tests/actions/clusters"
@@ -22,8 +21,11 @@ import (
 	"github.com/rancher/tests/actions/provisioning/permutations"
 	"github.com/rancher/tests/actions/provisioninginput"
 	"github.com/rancher/tests/actions/reports"
+	"github.com/rancher/tests/validation/pipeline/airgap/terraforminstall"
 	"github.com/rancher/tests/validation/pipeline/rancherha/corralha"
 	"github.com/rancher/tests/validation/provisioning/registries"
+	"github.com/rancher/tfp-automation/defaults/configs"
+	tfProvision "github.com/rancher/tfp-automation/tests/extensions/provisioning"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -54,6 +56,7 @@ func (a *AirGapRKE2CustomClusterTestSuite) SetupSuite() {
 
 	client, err := rancher.NewClient("", testSession)
 	require.NoError(a.T(), err)
+	a.client = client
 
 	var testuser = namegen.AppendRandomString("testuser-")
 	var testpassword = password.GenerateUserPassword("testpass-")
@@ -69,14 +72,12 @@ func (a *AirGapRKE2CustomClusterTestSuite) SetupSuite() {
 	newUser, err := users.CreateUserWithRole(client, user, "user")
 	require.NoError(a.T(), err)
 
-	standardUserClient, err := client.AsUser(newUser)
+	a.standardUserClient, err = client.AsUser(newUser)
 	require.NoError(a.T(), err)
-
-	a.client = standardUserClient
 
 	corralRancherHA := new(corralha.CorralRancherHA)
 	config.LoadConfig(corralha.CorralRancherHAConfigConfigurationFileKey, corralRancherHA)
-	if corralRancherHA.Name == "" {
+	if corralRancherHA.Name != "" {
 		a.registryFQDN = airgapCorral(a.T(), corralRancherHA)
 		corralConfig := corral.Configurations()
 
@@ -84,7 +85,12 @@ func (a *AirGapRKE2CustomClusterTestSuite) SetupSuite() {
 		require.NoError(a.T(), err)
 
 		a.corralPackage = corral.PackagesConfig()
+	} else {
+		tfRancherHA := new(terraforminstall.TerraformConfig)
+		config.LoadConfig(terraforminstall.TerraformConfigurationFileKey, tfRancherHA)
+		a.registryFQDN = tfRancherHA.StandaloneAirgapConfig.PrivateRegistry
 	}
+
 }
 
 func (a *AirGapRKE2CustomClusterTestSuite) TestProvisioningAirGapRKE2CustomCluster() {
@@ -110,9 +116,26 @@ func (a *AirGapRKE2CustomClusterTestSuite) TestProvisioningAirGapRKE2CustomClust
 
 			a.clustersConfig.RKE2KubernetesVersions = rke2Versions
 		}
+		if a.corralPackage != nil {
+			permutations.RunTestPermutations(&a.Suite, tt.name, tt.client, a.clustersConfig, permutations.RKE2AirgapCluster, nil, a.corralPackage)
+		} else {
+			cattleConfig, rancherConfig, terraformOptions, terraformConfig, terratestConfig := TfpSetupSuite(a.T())
 
-		permutations.RunTestPermutations(&a.Suite, tt.name, tt.client, a.clustersConfig, permutations.RKE2AirgapCluster, nil, a.corralPackage)
+			testUser, testPassword := configs.CreateTestCredentials()
+			configMap := []map[string]any{cattleConfig}
+
+			module := "airgap_rke2"
+			operations.ReplaceValue([]string{"terraform", "module"}, module, configMap[0])
+			operations.ReplaceValue([]string{"terraform", "privateRegistries", "systemDefaultRegistry"}, a.registryFQDN, configMap[0])
+			operations.ReplaceValue([]string{"terraform", "privateRegistries", "url"}, a.registryFQDN, configMap[0])
+
+			clusterIDs := tfProvision.Provision(a.T(), a.client, rancherConfig, terraformConfig, terratestConfig, testUser, testPassword, terraformOptions, configMap, false)
+
+			tfProvision.VerifyClustersState(a.T(), a.client, clusterIDs)
+			tfProvision.VerifyRegistry(a.T(), a.client, clusterIDs[0], terraformConfig)
+		}
 	}
+
 }
 
 func (a *AirGapRKE2CustomClusterTestSuite) TestProvisioningAirGapUpgradeRKE2CustomCluster() {
@@ -181,6 +204,6 @@ func (a *AirGapRKE2CustomClusterTestSuite) TestProvisioningAirGapUpgradeRKE2Cust
 // In order for 'go test' to run this suite, we need to create
 // a normal test function and pass our suite to suite.Run
 func TestAirGapCustomClusterRKE2ProvisioningTestSuite(t *testing.T) {
-	t.Skip("This test has been deprecated; check https://github.com/rancher/tfp-automation for updated tests")
+	//t.Skip("This test has been deprecated; check https://github.com/rancher/tfp-automation for updated tests")
 	suite.Run(t, new(AirGapRKE2CustomClusterTestSuite))
 }
